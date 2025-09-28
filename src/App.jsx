@@ -4,7 +4,7 @@ import { SignedIn, SignedOut, RedirectToSignIn, useUser, UserButton } from '@cle
 import Sidebar from "./components/Sidebar";
 import Dashboard from "./pages/Dashboard";
 import QuickSell from "./pages/QuickSell"
-import Order from "./pages/Order.Jsx"
+import Order from "./pages/Order"
 import OrderDetails from "./pages/OrderDetails"
 import Supplier from "./pages/Supplier"
 import Inventory from "./pages/Inventory"
