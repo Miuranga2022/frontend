@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+// 👇 Change this to your local PC IP where Local Print Service runs
+const LOCAL_PRINT_URL = "http://192.168.8.100:4000/print";
 
 export default function QuickSell() {
   const [curtains, setCurtains] = useState([]);
@@ -9,7 +11,6 @@ export default function QuickSell() {
   const [stock, setStock] = useState({ curtains: [], poles: [], accessories: [] });
   const [discount, setDiscount] = useState(0);
   const [payment, setPayment] = useState(0);
-  const [allItems, setAllItems] = useState([]);
 
   useEffect(() => {
     const fetchStock = async () => {
@@ -98,47 +99,36 @@ export default function QuickSell() {
         }))
       ];
 
-// Save order to backend
-const res = await fetch(`${API_BASE_URL}/orders/quick-sell`, {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    items: allItemsData,
-    billTotal: grandTotal,
-    discount: validDiscount,
-    paidAmount: payment,
-    paymentType: "cash"
-  })
-});
+      // 1. Save order to backend
+      const res = await fetch(`${API_BASE_URL}/orders/quick-sell`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: allItemsData,
+          billTotal: grandTotal,
+          discount: validDiscount,
+          paidAmount: payment,
+          paymentType: "cash"
+        })
+      });
 
-const data = await res.json();
-if (!res.ok) throw new Error(data.message || "Failed to save quick sell");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to save quick sell");
 
-// ✅ Print locally
-await fetch("http://192.168.8.194:4000/print", {   // replace with PC IP
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    billNo: data.bill.billNo,
-    items: allItemsData,
-    grandTotal,
-  }),
-});
-
-
-      // Update stock locally
-      const updateStockQuantity = (rows, stockItems, field) => {
-        rows.forEach(row => {
-          const stockItem = stockItems.find(i => i.itemName === row[field]);
-          if (stockItem) stockItem.quantity -= row.quantity;
-        });
-      };
-      updateStockQuantity(curtains, stock.curtains, "curtain");
-      updateStockQuantity(poles, stock.poles, "pole");
-      updateStockQuantity(accessories, stock.accessories, "accessory");
-
-      // Set items for printing
-      setAllItems(allItemsData);
+      // 2. Send bill to Local Print Service (LAN)
+      await fetch(LOCAL_PRINT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          billNo: data.bill.billNo,
+          items: allItemsData,
+          subTotal,
+          discountAmount,
+          grandTotal,
+          paidAmount: payment,
+          balance
+        })
+      });
 
       // Reset form
       setCurtains([]);
@@ -147,20 +137,19 @@ await fetch("http://192.168.8.194:4000/print", {   // replace with PC IP
       setDiscount(0);
       setPayment(0);
 
+      alert("Quick Sell saved & sent to printer");
+
     } catch (err) {
       console.error(err);
-      alert("Error saving quick sell. Check console.");
+      alert("Error saving or printing. Check console.");
     }
   };
-
-
 
   return (
     <div className="w-full p-6 bg-gray-50 min-h-screen">
       <h1 className="text-3xl font-bold mb-6 text-gray-800">Quick Sell</h1>
       <div className="grid grid-cols-1 lg:grid-cols-[3fr_1fr] gap-6">
-
-        {/* Left Column: Items */}
+        {/* Left Column */}
         <div className="space-y-6">
           <Section title="Curtains" rows={curtains} onChange={(i, name) => handleItemChange(i, name, curtains, setCurtains, stock.curtains, "curtain")}
             onQtyChange={(i, qty) => handleQtyChange(i, qty, curtains, setCurtains, stock.curtains, "curtain")}
@@ -187,16 +176,16 @@ await fetch("http://192.168.8.194:4000/print", {   // replace with PC IP
           />
         </div>
 
-        {/* Right Column: Bill Summary */}
+        {/* Right Column */}
         <div className="p-6 bg-white shadow-lg rounded-xl border border-gray-200 flex flex-col space-y-4">
           <h2 className="text-xl font-semibold text-gray-700">Bill Summary</h2>
 
           <div className="flex flex-col gap-3">
             <label className="font-medium text-gray-600">Discount (%)</label>
-            <input type="number" min="0" max="100" value={discount} onChange={e => setDiscount(parseInt(e.target.value) || 0)} className="p-2 border rounded focus:ring-2 focus:ring-blue-400 focus:outline-none" />
+            <input type="number" min="0" max="100" value={discount} onChange={e => setDiscount(parseInt(e.target.value) || 0)} className="p-2 border rounded" />
 
             <label className="font-medium text-gray-600">Payment (LKR)</label>
-            <input type="number" min={grandTotal} value={payment} onChange={e => setPayment(parseFloat(e.target.value) || 0)} className="p-2 border rounded focus:ring-2 focus:ring-green-400 focus:outline-none" />
+            <input type="number" min={grandTotal} value={payment} onChange={e => setPayment(parseFloat(e.target.value) || 0)} className="p-2 border rounded" />
           </div>
 
           <div className="space-y-2">
@@ -213,7 +202,6 @@ await fetch("http://192.168.8.194:4000/print", {   // replace with PC IP
   );
 }
 
-// Section Component (unchanged)
 function Section({ title, rows, onChange, onQtyChange, onAdd, onRemove, options, field }) {
   return (
     <div className="bg-white shadow-md rounded-xl p-6 border border-gray-200">
@@ -229,13 +217,13 @@ function Section({ title, rows, onChange, onQtyChange, onAdd, onRemove, options,
 
       {rows.map((row, idx) => (
         <div key={idx} className="grid grid-cols-[3fr_1fr_1fr_1fr_40px] items-center gap-3 border-b border-gray-200 py-2">
-          <select value={row[field]} onChange={e => onChange(idx, e.target.value)} className="p-2 border rounded focus:ring-2 focus:ring-blue-400 focus:outline-none">
+          <select value={row[field]} onChange={e => onChange(idx, e.target.value)} className="p-2 border rounded">
             <option value="">Select {title.slice(0, -1)}</option>
             {options.map(o => (
               <option key={o._id} value={o.itemName}>{o.itemName} ({o.quantity})</option>
             ))}
           </select>
-          <input type="number" min="1" value={row.quantity} onChange={e => onQtyChange(idx, e.target.value)} className="text-right p-2 border rounded focus:ring-2 focus:ring-blue-400 focus:outline-none" />
+          <input type="number" min="1" value={row.quantity} onChange={e => onQtyChange(idx, e.target.value)} className="text-right p-2 border rounded" />
           <div className="text-right">{row.rate.toFixed(2)}</div>
           <div className="text-right font-semibold">{row.lineTotal.toFixed(2)}</div>
           <button onClick={() => onRemove(idx)} className="text-red-600 font-bold hover:text-red-800 transition">&times;</button>
@@ -246,6 +234,3 @@ function Section({ title, rows, onChange, onQtyChange, onAdd, onRemove, options,
     </div>
   );
 }
-
-
-
