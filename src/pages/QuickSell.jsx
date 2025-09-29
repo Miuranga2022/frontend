@@ -98,20 +98,33 @@ export default function QuickSell() {
         }))
       ];
 
-      // Save order to backend
-      const res = await fetch(`${API_BASE_URL}/orders/quick-sell`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          items: allItemsData,
-          billTotal: grandTotal,
-          discount: validDiscount,
-          paidAmount: payment,
-          paymentType: "cash"
-        })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Failed to save quick sell");
+// Save order to backend
+const res = await fetch(`${API_BASE_URL}/orders/quick-sell`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    items: allItemsData,
+    billTotal: grandTotal,
+    discount: validDiscount,
+    paidAmount: payment,
+    paymentType: "cash"
+  })
+});
+
+const data = await res.json();
+if (!res.ok) throw new Error(data.message || "Failed to save quick sell");
+
+// ✅ Print locally
+await fetch("http://192.168.8.194:4000/print", {   // replace with PC IP
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    billNo: data.bill.billNo,
+    items: allItemsData,
+    grandTotal,
+  }),
+});
+
 
       // Update stock locally
       const updateStockQuantity = (rows, stockItems, field) => {
